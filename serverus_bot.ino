@@ -1,66 +1,63 @@
 #include<Servo.h>
 
-const int SERVO_PIN = 7;
-const int SENSOR1_PIN = A0;
-const int SENSOR2_PIN = A1;
-const int LED_PIN = 4;
-const double SMOOTHSTEP = .1;
-const double ROTATION_SPEED = 2.;
-const double LIGHT_INTENSITY = 350.;
-const int NUM_OF_INIT_ITERS = 2000;
+#define __THRESHOLD__ 3
+#define __SERVO_PIN__ 7
+#define __SENSOR1_PIN__ A0
+#define __SENSOR2_PIN__ A1
+#define __ROTATION_SPEED__ 2.
+#define __LIGHT_DAMP__ 420.
+#define __INIT_COUNT__ 2000
+// #define __LED_PIN__ 4 //uncomment if led is added
 
 Servo servo;
 int current_iter;
-double min0_v, range0, prev0,
-       min1_v, range1, prev1,
+double min0_v, anbient0,
+       min1_v, anbient1,
        prev_rot;
 
-void printf(double a) { Serial.println(a); }
 void printf(double a, double b) { Serial.print(a); Serial.print(", "); Serial.println(b); }
 void printf(double a, double b, double c) { Serial.print(a); Serial.print(", "); Serial.print(b); Serial.print(", "); Serial.println(c); }
-void printf(char a[], double b) { Serial.print(a); Serial.print(", "); Serial.println(b); }
-void printf(char a[], double b, double c) { Serial.print(a); Serial.print(": "); Serial.print(b); Serial.print(", "); Serial.println(c); }
 
 void setup()
 {
-  int current_iter = 0;
-  double prev0 = 0;
-  double prev1 = 0;
+  prev_rot = 90;
 
   Serial.begin(9600);
-  servo.attach(SERVO_PIN);
-  pinMode(LED_PIN, OUTPUT);
+  servo.attach(__SERVO_PIN__);
+  // pinMode(__LED_PIN__, OUTPUT); //uncomment if led is added
 
-  prev_rot = 90;
   servo.write(prev_rot);
   delay(1000);
 }
 
 void loop()
 {
-  double s0 = analogRead(SENSOR1_PIN);
-  double s1 = analogRead(SENSOR2_PIN);
+  // Get sensor reading
+  double s0 = analogRead(__SENSOR1_PIN__);
+  double s1 = analogRead(__SENSOR2_PIN__);
   
-  if(current_iter < NUM_OF_INIT_ITERS)
+  if(current_iter < __INIT_COUNT__)
   {
    // Init mode
-   // add to avg calc
+   // add to calc light intensity avg
    min0_v += s0;
    min1_v += s1;
    current_iter += 1;
-  }else if(current_iter == NUM_OF_INIT_ITERS)
+  }else if(current_iter == __INIT_COUNT__)
   {
     // Do once
     
-    // calculate min light
-    min0_v /= NUM_OF_INIT_ITERS;
-    min1_v /= NUM_OF_INIT_ITERS;
+    // calculate min light intensity
+    min0_v /= __INIT_COUNT__;
+    min1_v /= __INIT_COUNT__;
 
-    range0 = LIGHT_INTENSITY - min0_v;
-    range1 = LIGHT_INTENSITY - min1_v;
+    // calc ambiant light
+    anbient0 = __LIGHT_DAMP__ - min0_v;
+    anbient1 = __LIGHT_DAMP__ - min1_v;
 
-    // Signal readiness
-    digitalWrite(LED_PIN, HIGH);
+    // Signal readiness. uncomment if led is added
+    // digitalWrite(__LED_PIN__, HIGH);
+
     current_iter += 1;
     Serial.print("INIT: ");
     printf(min0_v, min1_v);
@@ -68,35 +65,34 @@ void loop()
   {
     // Working mode
     
-    s0 = min(1, max(0, (s0 - min0_v)/range0));
-    s1 = min(1, max(0, (s1 - min1_v)/range1));
+    // calculate ervo angle
+    double a = calculate_angle(s0, s1);
+    servo.write(a);
     
-    s0 = (abs(s0-prev0) > SMOOTHSTEP) ? prev0: s0; 
-    s1 = (abs(s1-prev1) > SMOOTHSTEP) ? prev1: s1; 
-    
-    double r = calculate_rotation(s0, s1);
-    printf(s0, s1,r);
-    servo.write(r);
-    
-    prev0 = s0;
-    prev1 = s1;
   }  
 }
 
-double calculate_rotation(double s0, double s1)
+double calculate_angle(double s0, double s1)
 {
+  // stabelize sensor read
+  s0 = min(1, max(0, ((int(s0*10)/10.) - min0_v)/anbient0));
+  s1 = min(1, max(0, ((int(s1*10)/10.) - min1_v)/anbient1));
+  
   // range = [-1, 1]
-  double r = min(max(s0, 0), 1)-min(max(s1, 0), 1);
+  double a = s0 - s1;
   // enhance range
+  a *= __ROTATION_SPEED__;
   // transform range to [0, 1]
-  r *= ROTATION_SPEED;
-  r += 1;
-  r *= 90; // devide by 2, multiply by 180 angle
-  r = int(r*10)/10.;
-  if(abs(prev_rot - r) > 1)
+  a += 1;
+  a *= 90; // devide by 2, multiply by 180 angle
+  
+  // return smoothe signal
+  a = int(a*10)/10.;
+  if(abs(prev_rot - a) > __THRESHOLD__)
   {
-    prev_rot = r;
-    return r;
+    prev_rot = a;
+    printf(s0, s1,a);
+    return a;
   }
   return prev_rot;
 }
