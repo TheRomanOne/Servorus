@@ -17,6 +17,7 @@ double min0_v, range0, prev0,
 
 void printf(double a) { Serial.println(a); }
 void printf(double a, double b) { Serial.print(a); Serial.print(", "); Serial.println(b); }
+void printf(double a, double b, double c) { Serial.print(a); Serial.print(", "); Serial.print(b); Serial.print(", "); Serial.println(c); }
 void printf(char a[], double b) { Serial.print(a); Serial.print(", "); Serial.println(b); }
 void printf(char a[], double b, double c) { Serial.print(a); Serial.print(": "); Serial.print(b); Serial.print(", "); Serial.println(c); }
 
@@ -25,13 +26,13 @@ void setup()
   int current_iter = 0;
   double prev0 = 0;
   double prev1 = 0;
-  double prev_rot = 0;
 
   Serial.begin(9600);
   servo.attach(SERVO_PIN);
   pinMode(LED_PIN, OUTPUT);
 
-  servo.write(90);
+  prev_rot = 90;
+  servo.write(prev_rot);
   delay(1000);
 }
 
@@ -72,10 +73,10 @@ void loop()
     
     s0 = (abs(s0-prev0) > SMOOTHSTEP) ? prev0: s0; 
     s1 = (abs(s1-prev1) > SMOOTHSTEP) ? prev1: s1; 
-   
+    
     double r = calculate_rotation(s0, s1);
-    Serial.println(180 * r);
-    servo.write(180 * r);
+    printf(s0, s1,r);
+    servo.write(r);
     
     prev0 = s0;
     prev1 = s1;
@@ -85,13 +86,17 @@ void loop()
 double calculate_rotation(double s0, double s1)
 {
   // range = [-1, 1]
-  double r = s0-s1;
-
+  double r = min(max(s0, 0), 1)-min(max(s1, 0), 1);
   // enhance range
-  r *= ROTATION_SPEED;
   // transform range to [0, 1]
-    r += 1;
-    r /= 2;
-
-  return r;
+  r *= ROTATION_SPEED;
+  r += 1;
+  r *= 90; // devide by 2, multiply by 180 angle
+  r = int(r*10)/10.;
+  if(abs(prev_rot - r) > 1)
+  {
+    prev_rot = r;
+    return r;
+  }
+  return prev_rot;
 }
